@@ -1,0 +1,9 @@
+{
+  "name": "titan-md-site",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Titan Anime MD pairing dashboard (Neon-backed)",
+  "dependencies": {
+    "pg": "^8.11.3"
+  }
+}
