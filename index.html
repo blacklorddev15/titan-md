@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#08080a" />
+  <meta name="description" content="Titan Anime MD WhatsApp pairing dashboard." />
+  <title>Titan Anime MD · Pairing Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page-glow page-glow-left" aria-hidden="true"></div>
+  <div class="page-glow page-glow-right" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Titan Anime MD home">
+      <span class="brand-mark">T</span>
+      <span><strong>TITAN</strong><em>ANIME MD</em></span>
+    </a>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <a href="./admin.html" class="ghost-button" style="padding: 6px 12px; font-size: 0.72rem; border-color: rgba(251,191,36,0.3); color: #fde68a; text-decoration: none; border-radius: 8px;">⚡ Admin</a>
+      <div class="header-status"><span class="pulse-dot"></span><span id="headerStatus">BRIDGE ONLINE</span></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-shell" aria-labelledby="heroTitle">
+      <div class="hero-copy">
+        <p class="overline">WELCOME TO</p>
+        <h1 id="heroTitle"><span>TITAN</span><br /><i>ANIME</i> <b>MD</b></h1>
+        <p class="hero-subtitle">POWERED BY <strong>TITAN.</strong> CONTROLLED BY <strong>DIEGO.</strong></p>
+        <div class="owner-chip"><span>♛</span> OWNED BY <strong>LORD DIEGO</strong> <span>♛</span></div>
+      </div>
+      <div class="hero-art" role="img" aria-label="Titan Anime MD artwork"></div>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="main-column">
+        <section class="panel pairing-panel" aria-labelledby="pairHeading">
+          <div class="panel-heading">
+            <div class="heading-icon">✦</div>
+            <div>
+              <p class="section-kicker">SECURE WHATSAPP LINK</p>
+              <h2 id="pairHeading">PAIR YOUR <span>DEVICE</span></h2>
+              <p class="muted">Follow the steps below to connect your WhatsApp with Titan Anime MD.</p>
+            </div>
+          </div>
+
+          <form id="pairingForm" novalidate>
+            <label for="phone">WhatsApp number</label>
+            <div class="phone-row">
+              <span class="country-prefix">+</span>
+              <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="254712345678" maxlength="15" required />
+              <button id="pairButton" class="primary-button" type="submit"><span>Generate code</span><b>→</b></button>
+            </div>
+            <p class="input-hint">Use the full international number without spaces, brackets, or the leading plus sign.</p>
+          </form>
+
+          <div id="pairStatus" class="inline-status" role="status" aria-live="polite"></div>
+
+          <div id="codeDisplay" class="code-card" hidden>
+            <span class="code-label">YOUR WHATSAPP PAIRING CODE</span>
+            <strong id="pairingCode">—</strong>
+            <p>Open WhatsApp → Linked devices → Link a device, then enter this code.</p>
+            <button id="copyCode" class="ghost-button" type="button">Copy code</button>
+          </div>
+
+          <div class="steps" aria-label="Pairing steps">
+            <div class="step"><span>01</span><p>Open WhatsApp on your phone.</p></div>
+            <div class="step"><span>02</span><p>Tap Menu (⋮) or Settings.</p></div>
+            <div class="step"><span>03</span><p>Select <strong>Linked devices</strong>.</p></div>
+            <div class="step"><span>04</span><p>Tap <strong>Link a device</strong>.</p></div>
+            <div class="step"><span>05</span><p>Enter the code shown here.</p></div>
+            <div class="step"><span>06</span><p>Wait a few seconds for confirmation.</p></div>
+          </div>
+
+          <div class="secure-strip"><span class="secure-icon">✓</span><span>Secure connection</span><i></i><span>End-to-end encrypted</span><i></i><span>24/7 active</span></div>
+        </section>
+
+        <section class="quote-panel"><span>✦</span> IN THE DARKNESS WE STAND. IN SILENCE WE RULE. <span>✦</span></section>
+      </div>
+
+      <aside class="sidebar" aria-label="Titan Anime MD information">
+        <section class="panel module-panel">
+          <div class="sidebar-title"><span>✦</span> MODULES <b>✦</b></div>
+          <a class="module-card" href="https://wa.me/254141960512" target="_blank" rel="noreferrer">
+            <span><strong>OWNER</strong><small>Contact the Owner</small></span><b>●</b><i>›</i>
+          </a>
+          <a class="module-card" href="https://whatsapp.com/channel/0029VaExample" target="_blank" rel="noreferrer">
+            <span><strong>CHANNEL</strong><small>Join Our Channel</small></span><b>➤</b><i>›</i>
+          </a>
+        </section>
+
+        <section class="panel about-panel">
+          <div class="sidebar-title"><span>✦</span> ABOUT TITAN <b>ANIME MD</b></div>
+          <p>Titan Anime MD is a powerful WhatsApp bot loaded with advanced features, 24/7 online, built for performance and reliability.</p>
+          <div class="divider"><span>✦</span></div>
+          <div class="sidebar-title status-heading"><span>✦</span> BOT <b>STATUS</b></div>
+          <div class="status-card">
+            <div><span class="status-led" id="statusLed"></span> STATUS: <strong id="botStatus">CHECKING</strong></div>
+            <div><span class="clock-icon">◷</span> UPTIME: <strong id="botUptime">—</strong></div>
+            <div><span class="users-icon">♙</span> ACTIVE: <strong id="activeSessions">—</strong></div>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="site-footer">© 2026 TITAN ANIME MD · ALL RIGHTS RESERVED</footer>
+  <script src="/script.js" defer></script>
+</body>
+</html>
+
