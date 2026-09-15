@@ -311,7 +311,7 @@
                <div class="metric-card"><span>Inactive 30d+</span><strong id="sessInactive">&mdash;</strong></div>
              </div>
              <div class="form-group">
-               <label for="sessDays">Delete sessions untouched for (days)</label>
+               <label for="sessDays">Delete sessions untouched for (days) &mdash; 0 deletes all</label>
                <input type="number" id="sessDays" value="30" min="1" max="3650">
              </div>
              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -433,7 +433,10 @@
     }
 
     async function clearInactiveSessions() {
-      const days = Math.max(1, Number(document.getElementById('sessDays').value) || 30);
+      const rawDays = document.getElementById('sessDays').value.trim();
+      const parsedDays = rawDays === '' ? 30 : Number(rawDays);
+      // A malformed entry falls back to 30, never to 0 -- "delete everything" must be typed.
+      const days = Number.isFinite(parsedDays) ? Math.max(0, Math.min(3650, parsedDays)) : 30;
       const post = (payload) => fetch('/api/pairing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Password': activeAdminPassword },
@@ -444,8 +447,16 @@
         const pre = await post({ action: 'clear_sessions', days, dryRun: true });
         if (!pre.ok || !pre.data.success) { sessMsg(pre.data.error || 'Could not count.', 'error'); return; }
         const n = pre.data.wouldClear || 0;
-        if (!n) { sessMsg(`Nothing to delete \u2014 no sessions untouched for ${days}+ days.`, 'success'); return; }
-        if (!confirm(`Delete ${n} session${n === 1 ? '' : 's'} not touched in ${days}+ days?\n\nThis cannot be undone.`)) {
+        if (!n) {
+          sessMsg(days === 0
+            ? 'Nothing to delete \u2014 no stored sessions.'
+            : `Nothing to delete \u2014 no sessions untouched for ${days}+ days.`, 'success');
+          return;
+        }
+        const what = days === 0
+          ? `ALL ${n} stored sessions, regardless of age`
+          : `${n} session${n === 1 ? '' : 's'} not touched in ${days}+ days`;
+        if (!confirm(`Delete ${what}?\n\nThis cannot be undone. The stored WhatsApp credentials for those rows go with them.`)) {
           sessMsg('Cancelled \u2014 nothing was deleted.');
           return;
         }

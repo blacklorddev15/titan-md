@@ -164,22 +164,34 @@ module.exports = async (req, res) => {
     // defaults high, and a dry run reports the count before anything is removed.
     if (body.action === 'clear_sessions') {
       if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
-      const days = Math.min(3650, Math.max(1, Number(body.days) || 30));
+      // days=0 means "every session, regardless of age". It has to be asked for
+      // explicitly -- it is never what an empty or malformed field falls back to -- and
+      // the count is still reported first so the button confirms before deleting.
+      const raw = body.days;
+      const parsed = (raw === undefined || raw === null || raw === '') ? 30 : Number(raw);
+      const days = Math.min(3650, Math.max(0, Number.isFinite(parsed) ? parsed : 30));
+      const all = days === 0;
+
       if (body.dryRun) {
-        const r = await pool.query(
-          `SELECT count(*)::int AS n FROM titan_sessions
-            WHERE updated_at < now() - make_interval(days => $1::int)`,
-          [days]
-        );
-        return res.json({ success: true, dryRun: true, days, wouldClear: r.rows[0].n });
+        const r = all
+          ? await pool.query(`SELECT count(*)::int AS n FROM titan_sessions`)
+          : await pool.query(
+              `SELECT count(*)::int AS n FROM titan_sessions
+                WHERE updated_at < now() - make_interval(days => $1::int)`,
+              [days]
+            );
+        return res.json({ success: true, dryRun: true, days, all, wouldClear: r.rows[0].n });
       }
-      const r = await pool.query(
-        `DELETE FROM titan_sessions
-          WHERE updated_at < now() - make_interval(days => $1::int)
-          RETURNING numero`,
-        [days]
-      );
-      return res.json({ success: true, days, cleared: r.rows.length });
+
+      const r = all
+        ? await pool.query(`DELETE FROM titan_sessions RETURNING numero`)
+        : await pool.query(
+            `DELETE FROM titan_sessions
+              WHERE updated_at < now() - make_interval(days => $1::int)
+              RETURNING numero`,
+            [days]
+          );
+      return res.json({ success: true, days, all, cleared: r.rows.length });
     }
 
     // ── public: generate pairing code ─────────────────────────
