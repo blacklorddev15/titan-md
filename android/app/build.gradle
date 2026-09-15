@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.aether.titanmd'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.aether.titanmd'
+        minSdk 24
+        targetSdk 34
+        // keep in step with android:versionCode / android:versionName in AndroidManifest.xml —
+        // build.sh reads the manifest, Gradle injects these
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            // Debug-signed sideload build; add a real signing config before any store upload.
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+// No dependencies: the app uses only Android framework classes (android.jar), so the build
+// needs neither AndroidX nor any Maven artifact.
+dependencies { }

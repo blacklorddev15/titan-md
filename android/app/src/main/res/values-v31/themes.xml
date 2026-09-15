@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash screen. Items mirror res/values/styles.xml because a
+         resource qualifier replaces the base style rather than merging into it. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorPrimary">@color/bg</item>
+        <item name="android:colorPrimaryDark">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+
+        <item name="android:windowSplashScreenBackground">@color/bg</item>
+        <!-- circular mark, inset so it sits inside the splash icon's safe circle -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_photo</item>
+    </style>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Titan's portal palette (styles.css): near-black, ink panels, red accent, silver text. -->
+    <color name="bg">#FF050507</color>
+    <color name="panel">#FF0A0B0F</color>
+    <color name="accent">#FFE5232B</color>
+    <color name="accent_bright">#FFFF3A42</color>
+    <color name="accent_dark">#FF5D111A</color>
+    <color name="text">#FFD8DBE1</color>
+    <color name="muted">#FF9DA0A8</color>
+</resources>

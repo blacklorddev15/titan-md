@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+.vercel
+*.log
+.DS_Store
+
+# Android build output. The APK is not built in the working tree — it is produced by
+# .github/workflows/build-apk.yml and committed back as titan-md.apk / apk/*.apk.
+android/build/
+android/dist/
+android/debug.keystore
+android/tools/icons_preview.png

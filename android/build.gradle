@@ -1,0 +1,5 @@
+// Root build script — only here for Android Studio users.
+// A command-line build that needs no Gradle at all lives in ./build.sh
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+}

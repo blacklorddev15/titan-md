@@ -1,0 +1,90 @@
+name: Build APK
+
+# The app has no Gradle wrapper and this repo ships no committed toolchain, so the APK is
+# built here: the runner has the JDK and Android SDK that android/build.sh expects.
+#
+# A push that touches android/** rebuilds and commits the APK back to the repo, which is what
+# Vercel serves at /titan-md.apk. Version bumps are therefore a one-line manifest edit.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform 34 and build-tools 34.0.0
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Build
+        run: ./android/build.sh
+
+      - name: Stage the stable download name
+        id: stage
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oE 'android:versionName="[^"]+"' android/app/src/main/AndroidManifest.xml \
+                    | sed -E 's/.*="([^"]+)".*/\1/' | head -1)
+          BUILT=$(ls android/dist/titan-md-*-debug.apk)
+          cp "$BUILT" titan-md.apk                       # stable name the site links to
+          mkdir -p apk
+          cp "$BUILT" "apk/titan-md-${VERSION}.apk"      # archived under its version
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum titan-md.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the APK is well formed
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile("titan-md.apk")
+          names = z.namelist()
+          assert "AndroidManifest.xml" in names, "no AndroidManifest.xml"
+          assert "classes.dex" in names, "no classes.dex"
+          assert z.testzip() is None, "corrupt zip"
+          print(f"APK OK: {len(names)} entries, {len(z.read('classes.dex'))} bytes of dex")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: titan-md-${{ steps.stage.outputs.version }}
+          path: titan-md.apk
+          if-no-files-found: error
+
+      - name: Commit the APK back to the repo
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f titan-md.apk apk
+          if git diff --cached --quiet; then
+            echo "APK unchanged, nothing to commit"
+          else
+            git commit -m "Build TITAN MD ${{ steps.stage.outputs.version }} APK (sha256 ${{ steps.stage.outputs.sha256 }}) [skip ci]"
+            git push
+          fi

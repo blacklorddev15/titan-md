@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TITAN MD</string>
+
+    <string name="menu_reload">Reload portal</string>
+    <string name="menu_url">Server URL</string>
+    <string name="menu_about">About &amp; safety</string>
+
+    <string name="consent_title">Before you pair</string>
+    <string name="consent_body">Linking a number gives the bot full access to that WhatsApp account — its messages and the ability to send as you.\n\nOnly pair a number you own, and only type the code yourself in WhatsApp on that phone. Never enter a code someone else gave you, and never ask someone else to enter one for you.</string>
+    <string name="consent_ok">I understand</string>
+
+    <string name="url_title">Server URL</string>
+    <string name="url_body">Address of the pairing portal. HTTPS is required except for localhost.</string>
+    <string name="url_save">Save and reload</string>
+    <string name="url_https_required">Use an https:// address (http is allowed only for localhost).</string>
+
+    <string name="retry">Retry</string>
+    <string name="loading_label">LOADING PORTAL…</string>
+    <string name="open_in_browser">Open in browser</string>
+    <string name="error_body">Could not reach the portal. Check your connection and the server URL.</string>
+    <string name="error_tls">Connection blocked: the server certificate could not be verified.</string>
+
+    <string name="copied">Code copied</string>
+    <string name="no_browser">No browser available</string>
+
+    <!-- in-app screen protection -->
+    <string name="lock_title">Unlock to continue</string>
+    <string name="lock_body">A pairing code is on screen. Confirm your device credential to return to the app.</string>
+
+    <!-- background watch service -->
+    <string name="channel_watch">Pairing progress</string>
+    <string name="channel_alert">Pairing alerts</string>
+    <string name="watch_running">Waiting for your pairing code…</string>
+    <string name="notif_ready_title">Pairing code ready</string>
+    <string name="notif_ready_body">Open TITAN MD and type the code into WhatsApp on this phone. For safety, the code is never included in the notification.</string>
+    <string name="notif_connected_title">Device paired</string>
+    <string name="notif_connected_body">This device is now linked to the node.</string>
+    <string name="notif_failed_title">Pairing failed</string>
+    <string name="notif_failed_body">The node rejected the request. Open the app to try again.</string>
+
+    <string name="about_title">About this app</string>
+    <string name="about_body">A WebView shell for the pairing portal.\n\nIt is a debug-signed build, not affiliated with WhatsApp or Meta. Pairing a number means the bot can read that account\u2019s messages and act as the account holder; unofficial clients also risk the account being banned.\n\nChange the portal address from the menu if you host your own copy.</string>
+</resources>

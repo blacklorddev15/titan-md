@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press shortcuts. These fire explicit intents at our own activity, so no browsable
+     intent filter is needed for the titanmd:// scheme — which keeps other apps from
+     triggering in-app events from outside. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_titan"
+        android:shortcutId="reload"
+        android:shortcutLongLabel="@string/menu_reload"
+        android:shortcutShortLabel="@string/menu_reload">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="titanmd://reload"
+            android:targetClass="com.aether.titanmd.MainActivity"
+            android:targetPackage="com.aether.titanmd" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_titan"
+        android:shortcutId="server_url"
+        android:shortcutLongLabel="@string/menu_url"
+        android:shortcutShortLabel="@string/menu_url">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="titanmd://url"
+            android:targetClass="com.aether.titanmd.MainActivity"
+            android:targetPackage="com.aether.titanmd" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_titan"
+        android:shortcutId="about"
+        android:shortcutLongLabel="@string/menu_about"
+        android:shortcutShortLabel="@string/menu_about">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="titanmd://about"
+            android:targetClass="com.aether.titanmd.MainActivity"
+            android:targetPackage="com.aether.titanmd" />
+    </shortcut>
+</shortcuts>
