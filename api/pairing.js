@@ -156,6 +156,22 @@ module.exports = async (req, res) => {
       });
     }
 
+    // admin: remove ONE stored session by number.
+    //
+    // titan_sessions is keyed by numero, so that is the identifier rather than a synthetic
+    // id. As with clear_sessions this only clears the database row (and the WhatsApp
+    // credentials stored on it); revoking the link itself is the bot's job with /delpair.
+    if (body.action === 'delete_session') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const numero = String(body.numero == null ? '' : body.numero).trim().slice(0, 40);
+      if (!numero) return res.status(400).json({ success: false, error: 'Missing session number.' });
+      const r = await pool.query(
+        'DELETE FROM titan_sessions WHERE numero = $1 RETURNING numero', [numero]
+      );
+      if (!r.rows.length) return res.status(404).json({ success: false, error: 'No such session.' });
+      return res.json({ success: true, deleted: r.rows[0].numero });
+    }
+
     // admin: remove sessions the bot has not touched for N days.
     //
     // titan_sessions has no status column: the bot writes updated_at when it connects or

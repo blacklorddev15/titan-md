@@ -238,6 +238,29 @@
       text-decoration: none;
       margin-left: 6px;
     }
+    /* ── paired users ─────────────────────────────────────────── */
+    .sess-list { margin-top: 4px; display: flex; flex-direction: column; }
+    .sess-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      padding: 9px 0; border-bottom: 1px solid rgba(255, 255, 255, .07);
+    }
+    .sess-row:last-child { border-bottom: none; }
+    .sess-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; text-align: left; }
+    .sess-main strong { font-family: monospace; font-size: .82rem; font-weight: 700; }
+    .sess-main small { color: #9ca3af; font-size: .66rem; }
+    .sess-meta { opacity: .8; }
+    .sess-right { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+    .tag.stored {
+      font-size: .62rem; padding: 2px 8px; border-radius: 99px;
+      background: rgba(148, 163, 184, .14); color: #94a3b8;
+    }
+    .del-btn {
+      background: transparent; border: 1px solid #7a3540; color: #f87171;
+      font-size: .68rem; font-weight: 600; padding: 3px 9px; border-radius: 8px;
+      cursor: pointer; font-family: inherit;
+    }
+    .del-btn:hover:not(:disabled) { background: rgba(248, 113, 113, .1); }
+    .del-btn:disabled { opacity: .5; cursor: wait; }
   </style>
 </head>
 <body>
@@ -277,8 +300,8 @@
         <div id="overviewTab" class="tab-content active">
           <div class="metrics-grid">
             <div class="metric-card">
-              <span>Sessions</span>
-              <strong id="statSessions">1,540</strong>
+                <span>Sessions</span>
+                <strong id="statSessions">&mdash;</strong>
             </div>
             <div class="metric-card">
               <span>Mode</span>
@@ -304,14 +327,16 @@
            </section>
 
            <section class="admin-card">
-             <h2>Session maintenance</h2>
-             <p class="section-text">Delete stored sessions the bot has not touched for a while. titan_sessions has no status column, so "inactive" can only mean "not refreshed in N days" — pick the threshold deliberately.</p>
+             <h2>Paired users</h2>
+             <p class="section-text">Everyone whose WhatsApp is linked to this bot. titan_sessions has no status column, so the only signal is when the bot last wrote the row.</p>
              <div class="metrics-grid" style="margin-bottom: 10px;">
                <div class="metric-card"><span>Stored</span><strong id="sessTotal">&mdash;</strong></div>
                <div class="metric-card"><span>Inactive 30d+</span><strong id="sessInactive">&mdash;</strong></div>
              </div>
-             <div class="form-group">
-               <label for="sessDays">Delete sessions untouched for (days) &mdash; 0 deletes all</label>
+             <div id="sessList" class="sess-list"></div>
+             <p class="section-text" style="margin-top: 10px;">Deleting clears the database row and the stored WhatsApp credentials with it. Unlinking the device is the bot's job &mdash; run <span style="font-family: monospace;">/delpair &lt;number&gt;</span> there first.</p>
+             <div class="form-group" style="margin-top: 12px;">
+               <label for="sessDays">Bulk delete sessions untouched for (days) &mdash; 0 deletes all</label>
                <input type="number" id="sessDays" value="30" min="1" max="3650">
              </div>
              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -319,7 +344,6 @@
                <button type="button" class="submit-btn" style="background: rgba(239, 68, 68, 0.2); color: #f87171;" onclick="clearInactiveSessions()">Delete inactive</button>
              </div>
              <div id="sessBox" class="status-box hidden" style="margin-top: 10px;"></div>
-             <textarea id="sessList" rows="6" readonly placeholder="Session list appears here&hellip;" style="width: 100%; margin-top: 10px; font-family: monospace; font-size: 0.72rem;"></textarea>
            </section>
          </div>
 
@@ -411,6 +435,47 @@
       box.classList.remove('hidden');
     }
 
+    // Numbers and session ids come out of the database, so they are escaped before markup.
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function relTime(iso) {
+      const t = iso ? new Date(iso).getTime() : 0;
+      if (!t) return 'never';
+      const mins = Math.floor((Date.now() - t) / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      return Math.floor(hrs / 24) + 'd ago';
+    }
+
+    // titan_sessions has no status column, so there is no connected/disconnected pill to
+    // show -- the useful facts are the number, where the session came from, and its age.
+    function renderSessions(rows) {
+      const box = document.getElementById('sessList');
+      if (!rows.length) {
+        box.innerHTML = '<p class="section-text">No paired users yet.</p>';
+        return;
+      }
+      box.innerHTML = rows.map((r) => {
+        const numero = esc(r.numero);
+        const sid = (r.sid && String(r.sid) !== String(r.numero))
+          ? esc(String(r.sid).slice(0, 30)) : '';
+        return '<div class="sess-row">' +
+          '<span class="sess-main"><strong>' + numero + '</strong>' +
+            (sid ? '<small>' + sid + '</small>' : '') +
+            '<small class="sess-meta">' + esc(relTime(r.updated_at)) + '</small></span>' +
+          '<span class="sess-right">' +
+            '<span class="tag stored">stored</span>' +
+            '<button type="button" class="del-btn" data-numero="' + numero + '">Delete</button>' +
+          '</span>' +
+        '</div>';
+      }).join('');
+    }
+
     async function loadSessions() {
       try {
         const res = await fetch('/api/pairing', {
@@ -422,15 +487,50 @@
         if (!res.ok || !data.success) { sessMsg(data.error || 'Could not load sessions.', 'error'); return; }
         document.getElementById('sessTotal').textContent = data.total != null ? data.total : '\u2014';
         document.getElementById('sessInactive').textContent = data.inactive30d != null ? data.inactive30d : '\u2014';
+        // keep the Overview metric honest: it used to be a hardcoded number
+        const stat = document.getElementById('statSessions');
+        if (stat && data.total != null) stat.textContent = String(data.total);
         const rows = data.sessions || [];
-        document.getElementById('sessList').value = rows.length
-          ? rows.map((r) => `${String(r.numero).padEnd(16)} ${String(r.sid || '').slice(0, 18).padEnd(20)} ${new Date(r.updated_at).toISOString().slice(0, 16).replace('T', ' ')}`).join('\n')
-          : 'No sessions stored.';
-        sessMsg(`Loaded ${rows.length} session${rows.length === 1 ? '' : 's'}.`, 'success');
+        renderSessions(rows);
+        sessMsg(`Loaded ${rows.length} paired user${rows.length === 1 ? '' : 's'}.`, 'success');
       } catch (e) {
         sessMsg('Could not reach the API.', 'error');
       }
     }
+
+    // One delegated listener, so re-rendering the list never leaves stale handlers behind.
+    document.getElementById('sessList').addEventListener('click', async (event) => {
+      const btn = event.target.closest('.del-btn');
+      if (!btn) return;
+      const numero = btn.getAttribute('data-numero');
+      if (!confirm(`Delete ${numero}?\n\n` +
+        `This removes the row and the stored WhatsApp credentials with it, so a rebuild can ` +
+        `no longer restore this number from the database. It does NOT unlink the device \u2014 ` +
+        `run /delpair ${numero} in the bot for that.`)) return;
+
+      btn.disabled = true;
+      btn.textContent = '\u2026';
+      try {
+        const res = await fetch('/api/pairing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Password': activeAdminPassword },
+          body: JSON.stringify({ action: 'delete_session', numero }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          sessMsg(data.error || 'Delete failed.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Delete';
+          return;
+        }
+        sessMsg(`Deleted ${data.deleted}.`, 'success');
+        await loadSessions();
+      } catch (e) {
+        sessMsg('Could not reach the API.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      }
+    });
 
     async function clearInactiveSessions() {
       const rawDays = document.getElementById('sessDays').value.trim();
