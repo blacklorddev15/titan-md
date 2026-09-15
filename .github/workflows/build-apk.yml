@@ -33,13 +33,36 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # ubuntu-latest already carries an Android SDK at /usr/local/lib/android/sdk, so this
+      # only pins the paths build.sh reads. android-actions/setup-android is deliberately not
+      # used: it shells out to sdkmanager and dies on the interactive licence prompt.
+      - name: Locate the preinstalled Android SDK
+        run: |
+          set -euo pipefail
+          for d in /usr/local/lib/android/sdk "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}"; do
+            if [ -n "$d" ] && [ -d "$d" ]; then
+              echo "ANDROID_SDK_ROOT=$d" >> "$GITHUB_ENV"
+              echo "ANDROID_HOME=$d" >> "$GITHUB_ENV"
+              SDK="$d"
+              break
+            fi
+          done
+          [ -n "${SDK:-}" ] || { echo "no Android SDK on this runner" >&2; exit 1; }
+          echo "using $SDK"
+          ls "$SDK"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | head -1)"
+          echo "cmdline-tools: $CMDLINE"
+          [ -n "$CMDLINE" ] && echo "$CMDLINE" >> "$GITHUB_PATH"
 
       - name: Install platform 34 and build-tools 34.0.0
         run: |
+          set -euo pipefail
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+          ls "$ANDROID_SDK_ROOT/build-tools"
+          ls "$ANDROID_SDK_ROOT/platforms"
+          test -f "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
+          test -f "$ANDROID_SDK_ROOT/platforms/android-34/android.jar"
 
       - name: Build
         run: ./android/build.sh
