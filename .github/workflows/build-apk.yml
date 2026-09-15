@@ -65,7 +65,8 @@ jobs:
           test -f "$ANDROID_SDK_ROOT/platforms/android-34/android.jar"
 
       - name: Build
-        run: ./android/build.sh
+        # invoked via bash rather than ./ so a checkout without the exec bit still builds
+        run: bash android/build.sh
 
       - name: Stage the stable download name
         id: stage
