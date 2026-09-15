@@ -52,8 +52,16 @@ async function ensureTables(pool) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Trimmed and case-insensitive. This password is typed by hand, and on a phone the first
+// letter gets capitalised — that should not read the same as a wrong password.
+function samePassword(supplied) {
+  const want = String(adminPassword || '').trim().toLowerCase();
+  const got = String(supplied || '').trim().toLowerCase();
+  return Boolean(want) && got === want;
+}
+
 function isAdmin(req) {
-  return adminPassword && (req.headers['x-admin-password'] || '') === adminPassword;
+  return samePassword(req.headers['x-admin-password'] || '');
 }
 
 module.exports = async (req, res) => {
@@ -96,7 +104,7 @@ module.exports = async (req, res) => {
       if (!adminPassword) {
         return res.status(503).json({ success: false, error: 'Admin password is not configured. Set TITAN_ADMIN_PASSWORD on this project.' });
       }
-      if (String(body.password || '') !== adminPassword) {
+      if (!samePassword(body.password)) {
         return res.status(401).json({ success: false, error: 'Incorrect admin password.' });
       }
       const s = await pool.query(`SELECT value FROM titan_settings WHERE key = 'premium_mode'`);
@@ -127,6 +135,51 @@ module.exports = async (req, res) => {
       const hb = await pool.query('SELECT last_seen FROM titan_heartbeat WHERE id = 1');
       const online = !!hb.rows[0] && Date.now() - new Date(hb.rows[0].last_seen).getTime() < 45000;
       return res.json({ backendOnline: online, message: online ? 'Titan bot is online (Neon heartbeat fresh).' : 'Titan bot is offline (no recent Neon heartbeat).' });
+    }
+
+    // admin: list stored sessions
+    if (body.action === 'list_sessions') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const rows = await pool.query(
+        `SELECT numero, sid, updated_at FROM titan_sessions ORDER BY updated_at DESC LIMIT 200`
+      );
+      const counts = await pool.query(
+        `SELECT count(*)::int AS total,
+                count(*) FILTER (WHERE updated_at < now() - interval '30 days')::int AS older_30d
+           FROM titan_sessions`
+      );
+      return res.json({
+        success: true,
+        sessions: rows.rows,
+        total: counts.rows[0].total,
+        inactive30d: counts.rows[0].older_30d,
+      });
+    }
+
+    // admin: remove sessions the bot has not touched for N days.
+    //
+    // titan_sessions has no status column: the bot writes updated_at when it connects or
+    // disconnects a number, not continuously, so a long-lived session can look old. That
+    // makes an age rule the only option — and a risky one — so the threshold is explicit,
+    // defaults high, and a dry run reports the count before anything is removed.
+    if (body.action === 'clear_sessions') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const days = Math.min(3650, Math.max(1, Number(body.days) || 30));
+      if (body.dryRun) {
+        const r = await pool.query(
+          `SELECT count(*)::int AS n FROM titan_sessions
+            WHERE updated_at < now() - make_interval(days => $1::int)`,
+          [days]
+        );
+        return res.json({ success: true, dryRun: true, days, wouldClear: r.rows[0].n });
+      }
+      const r = await pool.query(
+        `DELETE FROM titan_sessions
+          WHERE updated_at < now() - make_interval(days => $1::int)
+          RETURNING numero`,
+        [days]
+      );
+      return res.json({ success: true, days, cleared: r.rows.length });
     }
 
     // ── public: generate pairing code ─────────────────────────

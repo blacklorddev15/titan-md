@@ -258,7 +258,7 @@
         <form onsubmit="handleAdminLogin(event)">
           <div class="form-group">
             <label for="adminPass">Secure Passcode</label>
-            <input type="password" id="adminPass" placeholder="Enter passcode" required autocomplete="current-password">
+            <input type="password" id="adminPass" placeholder="Enter passcode" required autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false">
           </div>
           <button type="submit" class="submit-btn">Unlock Console</button>
         </form>
@@ -299,10 +299,29 @@
             <p class="section-text">Manage bot runtime and maintenance state.</p>
             <div style="display: grid; gap: 8px;">
               <button type="button" class="submit-btn" style="background: rgba(34, 197, 94, 0.2); color: #4ade80;" onclick="alert('Titan MD bot runtime synchronized!')">Sync Bot Runtime</button>
-              <button type="button" class="submit-btn" style="background: rgba(239, 68, 68, 0.2); color: #f87171;" onclick="alert('Maintenance mode toggled!')">Toggle Maintenance</button>
-            </div>
-          </section>
-        </div>
+               <button type="button" class="submit-btn" style="background: rgba(239, 68, 68, 0.2); color: #f87171;" onclick="alert('Maintenance mode toggled!')">Toggle Maintenance</button>
+             </div>
+           </section>
+
+           <section class="admin-card">
+             <h2>Session maintenance</h2>
+             <p class="section-text">Delete stored sessions the bot has not touched for a while. titan_sessions has no status column, so "inactive" can only mean "not refreshed in N days" — pick the threshold deliberately.</p>
+             <div class="metrics-grid" style="margin-bottom: 10px;">
+               <div class="metric-card"><span>Stored</span><strong id="sessTotal">&mdash;</strong></div>
+               <div class="metric-card"><span>Inactive 30d+</span><strong id="sessInactive">&mdash;</strong></div>
+             </div>
+             <div class="form-group">
+               <label for="sessDays">Delete sessions untouched for (days)</label>
+               <input type="number" id="sessDays" value="30" min="1" max="3650">
+             </div>
+             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+               <button type="button" class="submit-btn" onclick="loadSessions()">Refresh list</button>
+               <button type="button" class="submit-btn" style="background: rgba(239, 68, 68, 0.2); color: #f87171;" onclick="clearInactiveSessions()">Delete inactive</button>
+             </div>
+             <div id="sessBox" class="status-box hidden" style="margin-top: 10px;"></div>
+             <textarea id="sessList" rows="6" readonly placeholder="Session list appears here&hellip;" style="width: 100%; margin-top: 10px; font-family: monospace; font-size: 0.72rem;"></textarea>
+           </section>
+         </div>
 
         <!-- LICENSING TAB -->
         <div id="licensingTab" class="tab-content">
@@ -374,6 +393,7 @@
           const backendStatus = document.getElementById('backendStatus');
           backendStatus.textContent = 'Website admin unlocked. Titan backend-dependent actions may remain unavailable while the bot is offline.';
           if (data.config && typeof data.config.premiumMode === 'boolean') updateModeButtons(data.config.premiumMode);
+          loadSessions();
         } else {
           errBox.textContent = data.error || 'Incorrect admin password.';
           errBox.classList.remove('hidden');
@@ -381,6 +401,60 @@
       } catch (e) {
         errBox.textContent = 'Website admin authentication is unavailable. The bot backend may be offline, but that does not block website login.';
         errBox.classList.remove('hidden');
+      }
+    }
+
+    function sessMsg(text, tone) {
+      const box = document.getElementById('sessBox');
+      box.textContent = text;
+      box.className = 'status-box ' + (tone || '');
+      box.classList.remove('hidden');
+    }
+
+    async function loadSessions() {
+      try {
+        const res = await fetch('/api/pairing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Password': activeAdminPassword },
+          body: JSON.stringify({ action: 'list_sessions' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) { sessMsg(data.error || 'Could not load sessions.', 'error'); return; }
+        document.getElementById('sessTotal').textContent = data.total != null ? data.total : '\u2014';
+        document.getElementById('sessInactive').textContent = data.inactive30d != null ? data.inactive30d : '\u2014';
+        const rows = data.sessions || [];
+        document.getElementById('sessList').value = rows.length
+          ? rows.map((r) => `${String(r.numero).padEnd(16)} ${String(r.sid || '').slice(0, 18).padEnd(20)} ${new Date(r.updated_at).toISOString().slice(0, 16).replace('T', ' ')}`).join('\n')
+          : 'No sessions stored.';
+        sessMsg(`Loaded ${rows.length} session${rows.length === 1 ? '' : 's'}.`, 'success');
+      } catch (e) {
+        sessMsg('Could not reach the API.', 'error');
+      }
+    }
+
+    async function clearInactiveSessions() {
+      const days = Math.max(1, Number(document.getElementById('sessDays').value) || 30);
+      const post = (payload) => fetch('/api/pairing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': activeAdminPassword },
+        body: JSON.stringify(payload),
+      }).then((r) => r.json().then((j) => ({ ok: r.ok, data: j })).catch(() => ({ ok: r.ok, data: {} })));
+
+      try {
+        const pre = await post({ action: 'clear_sessions', days, dryRun: true });
+        if (!pre.ok || !pre.data.success) { sessMsg(pre.data.error || 'Could not count.', 'error'); return; }
+        const n = pre.data.wouldClear || 0;
+        if (!n) { sessMsg(`Nothing to delete \u2014 no sessions untouched for ${days}+ days.`, 'success'); return; }
+        if (!confirm(`Delete ${n} session${n === 1 ? '' : 's'} not touched in ${days}+ days?\n\nThis cannot be undone.`)) {
+          sessMsg('Cancelled \u2014 nothing was deleted.');
+          return;
+        }
+        const res = await post({ action: 'clear_sessions', days });
+        if (!res.ok || !res.data.success) { sessMsg(res.data.error || 'Delete failed.', 'error'); return; }
+        sessMsg(`Deleted ${res.data.cleared} session${res.data.cleared === 1 ? '' : 's'}.`, 'success');
+        await loadSessions();
+      } catch (e) {
+        sessMsg('Could not reach the API.', 'error');
       }
     }
 
