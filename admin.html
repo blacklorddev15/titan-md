@@ -336,8 +336,8 @@
              <div id="sessList" class="sess-list"></div>
              <p class="section-text" style="margin-top: 10px;">Deleting clears the database row and the stored WhatsApp credentials with it. Unlinking the device is the bot's job &mdash; run <span style="font-family: monospace;">/delpair &lt;number&gt;</span> there first.</p>
              <div class="form-group" style="margin-top: 12px;">
-               <label for="sessDays">Bulk delete sessions untouched for (days) &mdash; 0 deletes all</label>
-               <input type="number" id="sessDays" value="30" min="1" max="3650">
+                <label for="sessDays">Bulk delete sessions untouched for (days) &mdash; 0 deletes all</label>
+                <input type="number" id="sessDays" value="30" min="0" max="3650">
              </div>
              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                <button type="button" class="submit-btn" onclick="loadSessions()">Refresh list</button>
