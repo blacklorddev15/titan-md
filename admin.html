@@ -343,9 +343,32 @@
                <button type="button" class="submit-btn" onclick="loadSessions()">Refresh list</button>
                <button type="button" class="submit-btn" style="background: rgba(239, 68, 68, 0.2); color: #f87171;" onclick="clearInactiveSessions()">Delete inactive</button>
              </div>
-             <div id="sessBox" class="status-box hidden" style="margin-top: 10px;"></div>
-           </section>
-         </div>
+              <div id="sessBox" class="status-box hidden" style="margin-top: 10px;"></div>
+            </section>
+
+            <section class="admin-card">
+              <h2>Database</h2>
+              <p class="section-text">The pairing queue lives in this PostgreSQL database. If it runs out of quota or is removed, point the deployment at another one from here — no trip to the Vercel dashboard. Leaving the new database empty is fine: the schema is created on the first request.</p>
+              <div class="metrics-grid" style="margin-bottom: 10px;">
+                <div class="metric-card"><span>Host</span><strong id="dbHost">&mdash;</strong></div>
+                <div class="metric-card"><span>Database</span><strong id="dbName">&mdash;</strong></div>
+              </div>
+              <p class="section-text" id="dbMasked" style="font-family: monospace; word-break: break-all;"></p>
+              <div class="form-group">
+                <label for="dbUrl">New connection string (postgres://…)</label>
+                <input type="text" id="dbUrl" placeholder="postgresql://user:password@host/dbname?sslmode=require" autocomplete="off" spellcheck="false">
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <button type="button" class="submit-btn" onclick="testDatabase()">Test connection</button>
+                <button type="button" class="submit-btn" onclick="saveDatabase()">Save &amp; redeploy</button>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px;">
+                <button type="button" class="submit-btn" style="background: rgba(255, 255, 255, 0.06); color: #e5e7eb;" onclick="redeploySite()">Redeploy only</button>
+              </div>
+              <p class="section-text" style="margin-top: 10px;">The bot must be pointed at the <strong>same</strong> database, or it will look for requests somewhere the site never writes them.</p>
+              <div id="dbBox" class="status-box hidden" style="margin-top: 10px;"></div>
+            </section>
+          </div>
 
         <!-- LICENSING TAB -->
         <div id="licensingTab" class="tab-content">
@@ -428,6 +451,8 @@
           // reports the same outage back.
           if (dbDown) sessMsg('Session list unavailable while the database is refusing connections.', 'error');
           else loadSessions();
+          // Always worth showing: this panel is how the database gets replaced.
+          loadDatabase();
         } else {
           errBox.textContent = data.error || 'Incorrect admin password.';
           errBox.classList.remove('hidden');
@@ -443,6 +468,74 @@
       box.textContent = text;
       box.className = 'status-box ' + (tone || '');
       box.classList.remove('hidden');
+    }
+
+    // ── database panel ────────────────────────────────────────────────────────
+    // Pointing the deployment at a different database needs two things the server does for us:
+    // the environment variable has to change, and Vercel only applies that on a NEW build. The
+    // "Save & redeploy" button performs both, which is what makes this usable when the current
+    // database is refusing connections.
+    function dbMsg(text, tone) {
+      const box = document.getElementById('dbBox');
+      box.textContent = text;
+      box.className = 'status-box ' + (tone || 'success');
+      box.classList.remove('hidden');
+    }
+
+    async function adminAction(payload) {
+      const res = await fetch('/api/pairing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': activeAdminPassword },
+        body: JSON.stringify(payload),
+      });
+      return res.json().catch(() => ({}));
+    }
+
+    async function loadDatabase() {
+      try {
+        const data = await adminAction({ action: 'db_current' });
+        if (!data.success) {
+          dbMsg(data.error || 'Could not read the current database.', 'error');
+          return;
+        }
+        document.getElementById('dbHost').textContent = data.host || 'not set';
+        document.getElementById('dbName').textContent = data.database || '—';
+        document.getElementById('dbMasked').textContent = data.urlMasked
+          ? 'In use: ' + data.urlMasked
+          : 'No DATABASE_URL is set on this deployment.';
+        if (!data.canManage) {
+          document.getElementById('dbMasked').textContent +=
+            '  Saving from here needs VERCEL_API_TOKEN and PROJECT_ID on this deployment.';
+        }
+      } catch (e) {
+        dbMsg(String(e), 'error');
+      }
+    }
+
+    async function testDatabase() {
+      const url = document.getElementById('dbUrl').value.trim();
+      if (!url) { dbMsg('Paste a connection string first.', 'error'); return; }
+      dbMsg('Testing…');
+      const data = await adminAction({ action: 'db_test', url });
+      dbMsg(data.message || (data.success ? 'Connection OK.' : 'Could not connect.'), data.success ? 'success' : 'error');
+    }
+
+    async function saveDatabase() {
+      const url = document.getElementById('dbUrl').value.trim();
+      if (!url) { dbMsg('Paste a connection string first.', 'error'); return; }
+      dbMsg('Saving the variable and starting a build…');
+      const data = await adminAction({ action: 'db_set', url });
+      dbMsg((data.databaseSaved ? 'Saved. ' : '') + (data.message || ''), data.success ? 'success' : 'error');
+      if (data.success) {
+        document.getElementById('dbUrl').value = '';
+        loadDatabase();
+      }
+    }
+
+    async function redeploySite() {
+      dbMsg('Starting a build…');
+      const data = await adminAction({ action: 'redeploy' });
+      dbMsg(data.message || '', data.success ? 'success' : 'error');
     }
 
     // Numbers and session ids come out of the database, so they are escaped before markup.

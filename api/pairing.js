@@ -85,6 +85,73 @@ function describeDbFailure(error) {
   return { code: 'database_error', error: text };
 }
 
+// ── Vercel project access ─────────────────────────────────────────────────────
+// The one action that rescues a deployment whose database has run out of quota is pointing it at a
+// different Postgres, and that has to be possible from this console rather than the Vercel
+// dashboard. It needs a token plus the project it belongs to; both are read from the environment.
+function vercelCreds() {
+  return {
+    token: String(process.env.VERCEL_API_TOKEN || '').trim(),
+    project: String(process.env.PROJECT_ID || process.env.VERCEL_PROJECT_ID || '').trim(),
+    team: String(process.env.TEAM_ID || process.env.VERCEL_ORG_ID || process.env.VERCEL_TEAM_ID || '').trim(),
+  };
+}
+
+/**
+ * Starts a fresh production build from the Git source.
+ *
+ * Deliberately NOT a redeploy-by-deploymentId: that inherits the previous build's settings,
+ * environment variables included, so a changed DATABASE_URL would not take effect and the button
+ * would look like it worked when it had not. That was measured on the sibling skylar-pairing
+ * deployment, not assumed.
+ */
+async function startProductionBuild(creds) {
+  const teamQ = creds.team ? `?teamId=${encodeURIComponent(creds.team)}` : '';
+  const auth = { Authorization: `Bearer ${creds.token}` };
+
+  const projRes = await fetch(
+    `https://api.vercel.com/v9/projects/${encodeURIComponent(creds.project)}${teamQ}`,
+    { headers: auth }
+  );
+  const proj = await projRes.json();
+  if (!projRes.ok) {
+    return { success: false, message: 'Vercel: ' + ((proj.error && proj.error.message) || projRes.status) };
+  }
+
+  const link = proj.link || {};
+  if (!link.repoId) {
+    return {
+      success: false,
+      message: 'This project has no Git repository linked, so a rebuild that picks up new '
+             + 'environment variables cannot be started from here.',
+    };
+  }
+
+  const createRes = await fetch(`https://api.vercel.com/v13/deployments${teamQ}`, {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, auth),
+    body: JSON.stringify({
+      name: proj.name || link.repo,
+      project: creds.project,
+      target: 'production',
+      gitSource: {
+        type: link.type || 'github',
+        repoId: link.repoId,
+        ref: link.productionBranch || 'main',
+      },
+    }),
+  });
+  const created = await createRes.json();
+  if (!createRes.ok) {
+    return { success: false, message: 'Vercel: ' + ((created.error && created.error.message) || createRes.status) };
+  }
+  return {
+    success: true,
+    message: 'Rebuild started — the site stays up while it builds, and the new database is used once it finishes.',
+    url: created.url ? `https://${created.url}` : '',
+  };
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Trimmed and case-insensitive. This password is typed by hand, and on a phone the first
@@ -203,6 +270,103 @@ module.exports = async (req, res) => {
       const hb = await pool.query('SELECT last_seen FROM titan_heartbeat WHERE id = 1');
       const online = !!hb.rows[0] && Date.now() - new Date(hb.rows[0].last_seen).getTime() < 45000;
       return res.json({ backendOnline: online, message: online ? 'Titan bot is online (Neon heartbeat fresh).' : 'Titan bot is offline (no recent Neon heartbeat).' });
+    }
+
+    // ── admin: which database this deployment is running on ───
+    // Host and database name only. The password is not needed to identify a database, and this
+    // response is rendered in a browser.
+    if (body.action === 'db_current') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const raw = String(process.env.DATABASE_URL || '');
+      let host = '';
+      let name = '';
+      try {
+        const parsed = new URL(raw);
+        host = parsed.host;
+        name = parsed.pathname.replace(/^\//, '');
+      } catch { /* missing or malformed */ }
+      const creds = vercelCreds();
+      return res.json({
+        success: true,
+        host,
+        database: name,
+        urlMasked: raw.replace(/^(postgres(?:ql)?:\/\/[^:]+:)[^@]+@/i, '$1\u2022\u2022\u2022\u2022@'),
+        canManage: Boolean(creds.token && creds.project),
+      });
+    }
+
+    // Opens a candidate connection string and closes it again, so a new database can be checked
+    // before the site is pointed at it. Read-only: one SELECT 1, nothing is written.
+    if (body.action === 'db_test') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const target = String(body.url || '').trim();
+      if (!/^postgres(ql)?:\/\//i.test(target)) {
+        return res.json({ success: false, message: 'That does not look like a PostgreSQL connection string.' });
+      }
+      const probe = new Pool({
+        connectionString: target.split('?')[0],
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 8000,
+        max: 1,
+      });
+      try {
+        await probe.query('SELECT 1');
+        return res.json({ success: true, message: 'Connection OK — the database answered.' });
+      } catch (error) {
+        return res.json({ success: false, message: 'Could not connect: ' + (error.message || 'unknown error') });
+      } finally {
+        await probe.end().catch(() => {});
+      }
+    }
+
+    // Writes DATABASE_URL onto the Vercel project and starts a build. Those two steps together are
+    // what actually moves the deployment onto a different database.
+    if (body.action === 'db_set') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const target = String(body.url || '').trim();
+      if (!/^postgres(ql)?:\/\//i.test(target)) {
+        return res.json({ success: false, message: 'That does not look like a PostgreSQL connection string.' });
+      }
+      const creds = vercelCreds();
+      if (!creds.token || !creds.project) {
+        return res.json({
+          success: false,
+          message: 'Saving the database needs VERCEL_API_TOKEN and PROJECT_ID set on this deployment.',
+        });
+      }
+      const teamQ = creds.team ? `&teamId=${encodeURIComponent(creds.team)}` : '';
+      const envRes = await fetch(
+        `https://api.vercel.com/v10/projects/${encodeURIComponent(creds.project)}/env?upsert=true${teamQ}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${creds.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'DATABASE_URL', value: target, type: 'encrypted', target: ['production'] }),
+        }
+      );
+      const envBody = await envRes.json().catch(() => ({}));
+      if (!envRes.ok) {
+        return res.json({
+          success: false,
+          message: 'Vercel rejected the environment change: '
+                 + ((envBody.error && envBody.error.message) || envRes.status),
+        });
+      }
+      const build = await startProductionBuild(creds);
+      return res.json(Object.assign({ databaseSaved: true }, build));
+    }
+
+    // Rebuild from Git so an environment change takes effect — Vercel only applies environment
+    // variables on a new build, so this is the step that makes the value above real.
+    if (body.action === 'redeploy') {
+      if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
+      const creds = vercelCreds();
+      if (!creds.token || !creds.project) {
+        return res.json({
+          success: false,
+          message: 'Redeploy needs VERCEL_API_TOKEN and PROJECT_ID set on this deployment.',
+        });
+      }
+      return res.json(await startProductionBuild(creds));
     }
 
     // admin: list stored sessions
