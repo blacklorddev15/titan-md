@@ -394,7 +394,10 @@
   </div>
 
   <script>
-    let activeAdminPassword = 'titan10';
+    // Deliberately empty. A passcode hardcoded into a page is readable by anyone who opens
+    // view-source, and this one was shipped as 'titan10'. It is only ever set from what the
+    // admin actually typed, after the server has accepted it.
+    let activeAdminPassword = '';
 
     async function handleAdminLogin(event) {
       event.preventDefault();
@@ -415,9 +418,16 @@
           loginCard.classList.add('hidden');
           dashboard.classList.remove('hidden');
           const backendStatus = document.getElementById('backendStatus');
-          backendStatus.textContent = 'Website admin unlocked. Titan backend-dependent actions may remain unavailable while the bot is offline.';
+          const dbDown = data.database === 'unavailable';
+          backendStatus.textContent = dbDown
+            ? 'Admin unlocked. The database is refusing connections, so the session list and gateway mode are paused — the console itself stays open.'
+            : 'Website admin unlocked. Titan backend-dependent actions may remain unavailable while the bot is offline.';
+          backendStatus.className = 'status-box ' + (dbDown ? 'error' : 'success');
           if (data.config && typeof data.config.premiumMode === 'boolean') updateModeButtons(data.config.premiumMode);
-          loadSessions();
+          // Only worth asking for the list when the database is answering; otherwise it just
+          // reports the same outage back.
+          if (dbDown) sessMsg('Session list unavailable while the database is refusing connections.', 'error');
+          else loadSessions();
         } else {
           errBox.textContent = data.error || 'Incorrect admin password.';
           errBox.classList.remove('hidden');

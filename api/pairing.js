@@ -50,6 +50,41 @@ async function ensureTables(pool) {
   )`);
 }
 
+// Table creation used to run at the top of every request, in front of all routing — including the
+// admin passcode check. A database that refuses connections therefore took the whole admin console
+// down with it, and the console reported the passcode "not entering" when in fact no password was
+// ever compared. It now runs once per process (retried on the next request if it failed) and never
+// blocks a request.
+let tablesPromise = null;
+
+function ensureTablesOnce(pool) {
+  if (!tablesPromise) {
+    tablesPromise = ensureTables(pool).catch((error) => {
+      tablesPromise = null;
+      throw error;
+    });
+  }
+  return tablesPromise;
+}
+
+// Turns a driver error into something the console can display without showing a bare driver dump.
+function describeDbFailure(error) {
+  const text = String((error && error.message) || 'Database error.');
+  if (/quota|exceeded/i.test(text)) {
+    return {
+      code: 'database_quota_exceeded',
+      error: `The database has hit its usage limit, so data actions are paused. Admin access is unaffected. (${text})`,
+    };
+  }
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|timeout|terminat/i.test(text)) {
+    return {
+      code: 'database_unreachable',
+      error: `The database cannot be reached right now, so data actions are paused. Admin access is unaffected. (${text})`,
+    };
+  }
+  return { code: 'database_error', error: text };
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Trimmed and case-insensitive. This password is typed by hand, and on a phone the first
@@ -70,11 +105,34 @@ module.exports = async (req, res) => {
   }
   const pool = makePool();
   try {
-    await ensureTables(pool);
+    // Never fatal: a database outage must not stop the admin console from opening.
+    try {
+      await ensureTablesOnce(pool);
+    } catch (error) {
+      console.warn('[ensureTables] skipped:', error.message);
+    }
 
     // ── GET stats ─────────────────────────────────────────────
     if ((req.method || 'GET').toUpperCase() === 'GET') {
-      const hb = await pool.query('SELECT status, last_seen, premium_mode FROM titan_heartbeat WHERE id = 1');
+      let hb;
+      try {
+        hb = await pool.query('SELECT status, last_seen, premium_mode FROM titan_heartbeat WHERE id = 1');
+      } catch (error) {
+        // Answer 200 with the truth rather than a 500, so the portal still renders and can say
+        // which part is down instead of showing an error page.
+        const failure = describeDbFailure(error);
+        return res.status(200).json({
+          status: 'offline',
+          database: 'unavailable',
+          code: failure.code,
+          error: failure.error,
+          uptime: 0,
+          pairedCount: null,
+          activeSessions: null,
+          premiumMode: false,
+          serverId: '', serverIp: '', serverPort: '', panelDomain: '',
+        });
+      }
       const row = hb.rows[0];
       const fresh = row && row.last_seen && Date.now() - new Date(row.last_seen).getTime() < 45000;
       const sessions = await pool.query('SELECT count(*)::int AS c FROM titan_sessions');
@@ -107,11 +165,21 @@ module.exports = async (req, res) => {
       if (!samePassword(body.password)) {
         return res.status(401).json({ success: false, error: 'Incorrect admin password.' });
       }
-      const s = await pool.query(`SELECT value FROM titan_settings WHERE key = 'premium_mode'`);
-      const hb = await pool.query('SELECT premium_mode FROM titan_heartbeat WHERE id = 1');
-      const premiumMode = s.rows[0] ? Boolean(s.rows[0].value) : hb.rows[0] ? Boolean(hb.rows[0].premium_mode) : false;
+      // Unlocking the console is a passcode check, so it must not depend on the database. The only
+      // thing read here decides which mode button looks active — useful, never essential.
+      let premiumMode = false;
+      let database = 'ok';
+      try {
+        const s = await pool.query(`SELECT value FROM titan_settings WHERE key = 'premium_mode'`);
+        const hb = await pool.query('SELECT premium_mode FROM titan_heartbeat WHERE id = 1');
+        premiumMode = s.rows[0] ? Boolean(s.rows[0].value) : hb.rows[0] ? Boolean(hb.rows[0].premium_mode) : false;
+      } catch (error) {
+        database = 'unavailable';
+        console.warn('[admin_login] gateway mode unavailable:', error.message);
+      }
       return res.json({
         success: true,
+        database,
         config: { panelDomain: '', serverIp: '', serverPort: '', serverId: '', premiumMode },
       });
     }
@@ -243,7 +311,15 @@ module.exports = async (req, res) => {
     }
     return res.status(200).json({ error: 'Timed out waiting for Titan MD. Please retry.' });
   } catch (e) {
-    return res.status(500).json({ status: 'offline', error: e.message || 'Database error.' });
+    const failure = describeDbFailure(e);
+    // 503 when the database is the problem (data actions are paused), 500 for anything unexpected.
+    const status = failure.code === 'database_error' ? 500 : 503;
+    return res.status(status).json({
+      status: 'offline',
+      success: false,
+      code: failure.code,
+      error: failure.error,
+    });
   } finally {
     pool.end().catch(() => {});
   }
