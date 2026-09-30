@@ -97,6 +97,14 @@ function vercelCreds() {
   };
 }
 
+// Names only what is actually absent, so the console never asks for something already configured.
+function missingVercelCreds(creds) {
+  return [
+    !creds.token && 'VERCEL_API_TOKEN',
+    !creds.project && 'PROJECT_ID',
+  ].filter(Boolean);
+}
+
 /**
  * Starts a fresh production build from the Git source.
  *
@@ -292,6 +300,7 @@ module.exports = async (req, res) => {
         database: name,
         urlMasked: raw.replace(/^(postgres(?:ql)?:\/\/[^:]+:)[^@]+@/i, '$1\u2022\u2022\u2022\u2022@'),
         canManage: Boolean(creds.token && creds.project),
+        missing: missingVercelCreds(creds),
       });
     }
 
@@ -328,10 +337,11 @@ module.exports = async (req, res) => {
         return res.json({ success: false, message: 'That does not look like a PostgreSQL connection string.' });
       }
       const creds = vercelCreds();
-      if (!creds.token || !creds.project) {
+      const missing = missingVercelCreds(creds);
+      if (missing.length) {
         return res.json({
           success: false,
-          message: 'Saving the database needs VERCEL_API_TOKEN and PROJECT_ID set on this deployment.',
+          message: `Saving the database needs ${missing.join(' and ')} set on this deployment.`,
         });
       }
       const teamQ = creds.team ? `&teamId=${encodeURIComponent(creds.team)}` : '';
@@ -360,10 +370,11 @@ module.exports = async (req, res) => {
     if (body.action === 'redeploy') {
       if (!isAdmin(req)) return res.status(401).json({ success: false, error: 'Unauthorized.' });
       const creds = vercelCreds();
-      if (!creds.token || !creds.project) {
+      const missing = missingVercelCreds(creds);
+      if (missing.length) {
         return res.json({
           success: false,
-          message: 'Redeploy needs VERCEL_API_TOKEN and PROJECT_ID set on this deployment.',
+          message: `Redeploy needs ${missing.join(' and ')} set on this deployment.`,
         });
       }
       return res.json(await startProductionBuild(creds));

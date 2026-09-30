@@ -504,8 +504,9 @@
           ? 'In use: ' + data.urlMasked
           : 'No DATABASE_URL is set on this deployment.';
         if (!data.canManage) {
+          const missing = (data.missing && data.missing.length) ? data.missing.join(' and ') : 'credentials';
           document.getElementById('dbMasked').textContent +=
-            '  Saving from here needs VERCEL_API_TOKEN and PROJECT_ID on this deployment.';
+            '  Saving from here needs ' + missing + ' on this deployment.';
         }
       } catch (e) {
         dbMsg(String(e), 'error');
